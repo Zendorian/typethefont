@@ -1,0 +1,193 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TypeTheFont</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet"/>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+      background-color: #fefefe;
+    }
+    #drop-zone {
+      border: 2px dashed #aaa;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      margin-bottom: 1rem;
+      background: #f8f9fa;
+    }
+    #drop-zone.dragover {
+      background-color: #e3f2fd;
+    }
+    img {
+      max-width: 100%;
+      max-height: 400px;
+      display: block;
+      margin-top: 1rem;
+    }
+    button {
+      margin-top: 1rem;
+      margin-right: 1rem;
+    }
+    #results {
+      margin-top: 2rem;
+    }
+    .font-result {
+      margin-bottom: 2rem;
+    }
+    .category-filter, .custom-preview {
+      margin: 1rem 0;
+    }
+    .font-preview {
+      font-size: 24px;
+      padding-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>TypeTheFont</h1>
+
+  <div id="drop-zone">
+    <p>Drag & drop an image here, or click to upload</p>
+    <input type="file" id="image-upload" accept="image/*" hidden />
+  </div>
+
+  <img id="preview" src="" alt="Preview"/>
+
+  <div>
+    <button id="reset-button">Reset</button>
+    <button id="submit-button">Crop & Identify</button>
+  </div>
+
+  <div class="custom-preview">
+    <label>Live Preview Text:</label>
+    <input type="text" id="live-text" placeholder="Type text to preview..." value="Sample text"/>
+  </div>
+
+  <div class="category-filter">
+    <label>Filter by category:</label>
+    <select id="category-select">
+      <option value="all">All</option>
+      <option value="sans-serif">Sans Serif</option>
+      <option value="serif">Serif</option>
+      <option value="display">Display</option>
+      <option value="handwriting">Handwriting</option>
+      <option value="monospace">Monospace</option>
+    </select>
+  </div>
+
+  <div id="results"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+  <script>
+    const dropZone = document.getElementById("drop-zone");
+    const fileInput = document.getElementById("image-upload");
+    const preview = document.getElementById("preview");
+    const submitBtn = document.getElementById("submit-button");
+    const resetBtn = document.getElementById("reset-button");
+    const liveText = document.getElementById("live-text");
+    const results = document.getElementById("results");
+    const categorySelect = document.getElementById("category-select");
+
+    let cropper, rawData = {};
+
+    dropZone.addEventListener("click", () => fileInput.click());
+
+    dropZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropZone.classList.add("dragover");
+    });
+
+    dropZone.addEventListener("dragleave", () => {
+      dropZone.classList.remove("dragover");
+    });
+
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropZone.classList.remove("dragover");
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        fileInput.files = e.dataTransfer.files;
+        handleFile(file);
+      }
+    });
+
+    fileInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file) handleFile(file);
+    });
+
+    function handleFile(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        preview.src = reader.result;
+        if (cropper) cropper.destroy();
+        preview.onload = () => {
+          cropper = new Cropper(preview, { viewMode: 1 });
+        };
+      };
+      reader.readAsDataURL(file);
+    }
+
+    resetBtn.onclick = () => {
+      preview.src = "";
+      results.innerHTML = "";
+      if (cropper) cropper.destroy();
+      cropper = null;
+    };
+
+    submitBtn.onclick = async () => {
+      if (!cropper) return;
+      results.innerHTML = "Processing...";
+      cropper.getCroppedCanvas().toBlob(async (blob) => {
+        const formData = new FormData();
+        formData.append("file", blob, "crop.png");
+        const res = await fetch("/identify-font", { method: "POST", body: formData });
+        const data = await res.json();
+        rawData = data;
+        renderResults();
+      }, "image/png");
+    };
+
+    function renderResults() {
+      const filter = categorySelect.value;
+      const custom = liveText.value;
+      results.innerHTML = "";
+      if (!rawData.words) return;
+
+      rawData.words.forEach((word) => {
+        const section = document.createElement("div");
+        section.innerHTML = `<h3>${word}</h3>`;
+        const matches = rawData.matches[word] || [];
+
+        matches
+          .filter((f) => filter === "all" || f.category === filter)
+          .forEach((font) => {
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = `https://fonts.googleapis.com/css2?family=${font.name.replace(/ /g, "+")}&display=swap`;
+            document.head.appendChild(link);
+
+            const div = document.createElement("div");
+            div.className = "font-result";
+            div.innerHTML = `
+              <strong>${font.name}</strong> (${font.category})<br>
+              <div class="font-preview" style="font-family: '${font.name}', sans-serif;">${custom}</div>
+              <a href="${font.url}" target="_blank">Open on Google Fonts</a>
+            `;
+            section.appendChild(div);
+          });
+
+        results.appendChild(section);
+      });
+    }
+
+    liveText.addEventListener("input", renderResults);
+    categorySelect.addEventListener("change", renderResults);
+  </script>
+</body>
+</html>
