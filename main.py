@@ -33,7 +33,7 @@ def get_google_fonts():
         with open(FONTS_CACHE_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     try:
-        url = "https://www.googleapis.com/webfonts/v1/webfonts?key=YOUR_GOOGLE_FONTS_API_KEY"
+        url = "https://www.googleapis.com/webfonts/v1/webfonts?key=AIzaSyCjT8DVkZFJwXvxaVKuhJ3xrW0XfRkPfwo"
         response = requests.get(url)
         data = response.json()
         fonts = [
